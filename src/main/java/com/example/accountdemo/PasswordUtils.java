@@ -5,39 +5,64 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Random;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 
 public class PasswordUtils {
-    public static User createSaltedHashedUser(String username, String password) {
-        try {
-            Random random = new Random();
-            byte[] saltBytes = new byte[16];
-            random.nextBytes(saltBytes);
-            String salt = Base64.getEncoder().encodeToString(saltBytes);
+    private static final int SALT_LENGTH = 16; // Length of the salt in bytes
+    public static User createSaltedHashedUser(String username, String password, String userType) {
+        String salt = PasswordUtils.generateSalt();
+        String passwordHash = PasswordUtils.hashPassword(password, salt);
 
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(saltBytes);
-            byte[] hashedPasswordBytes = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            String hashedPassword = Base64.getEncoder().encodeToString(hashedPasswordBytes);
-
-            return new User(username, salt, hashedPassword);
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
+        if (userType.equals("RegularUser")) {
+            return new RegularUser(username, salt, passwordHash, "");
+        } else if (userType.equals("Admin")) {
+            return new Admin(username, salt, passwordHash, "");
+        } else {
+            throw new IllegalArgumentException("Invalid user type.");
         }
-        return null;
     }
 
-    public static boolean verifyPassword(User user, String password) {
-        try {
-            byte[] saltBytes = Base64.getDecoder().decode(user.getSalt());
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(saltBytes);
-            byte[] hashedPasswordBytes = md.digest(password.getBytes(StandardCharsets.UTF_8));
-            String hashedPassword = Base64.getEncoder().encodeToString(hashedPasswordBytes);
+    // Add a new method for password reset, considering user type
+    public static User resetPassword(String username, String newPassword, String userType) {
+        return createSaltedHashedUser(username, newPassword, userType);
+    }
 
-            return hashedPassword.equals(user.getPasswordHash());
+
+    public static boolean verifyPassword(User user, String password) {
+        String salt = user.getSalt();
+        String hashedPassword = user.getPasswordHash();
+        String hashedEnteredPassword = hashPassword(password, salt);
+        return hashedEnteredPassword.equals(hashedPassword);
+    }
+
+
+    public static String generateSalt() {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[SALT_LENGTH];
+        random.nextBytes(salt);
+        return bytesToHex(salt);
+    }
+
+    public static String hashPassword(String password, String salt) {
+        String saltedPassword = salt + password;
+        String hashedPassword = "";
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hashedBytes = md.digest(saltedPassword.getBytes());
+            hashedPassword = bytesToHex(hashedBytes);
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         }
-        return false;
+        return hashedPassword;
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte b : bytes) {
+            result.append(String.format("%02x", b));
+        }
+        return result.toString();
     }
 }
